@@ -2,7 +2,7 @@
 
 This project incorporates and modifies work from:
 
-- https://github.com/Glat0s/gpu-unlock-windows-generic � direct upstream of this fork; generic runtime profiles, GUI, packaging and source tree.
+- https://github.com/Glat0s/gpu-unlock-windows-generic — direct upstream of this fork; generic runtime profiles, GUI, packaging and source tree.
 
 - https://github.com/luizwidmer/gpu-unlock-4090-windows ? Windows UEFI platform, ownership, recovery and firmware preparation code.
 - https://github.com/impacifist/Windows-GPU-UNLOCK ? Windows/Ampere port lineage.

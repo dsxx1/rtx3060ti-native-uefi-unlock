@@ -1,4 +1,4 @@
-# One successful native UEFI boot � 2026-10-27
+# One successful native UEFI boot — 2026-10-27
 
 ## Configuration
 

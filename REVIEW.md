@@ -1,6 +1,6 @@
 # Review and release status
 
-## Fork follow-up � 2026-10-27
+## Fork follow-up — 2026-10-27
 
 The native CAP01 profile now has one successful physical Windows boot and compute
 validation on the exact MSI Z390M / RTX 3060 Ti configuration in
