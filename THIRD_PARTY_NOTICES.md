@@ -2,6 +2,8 @@
 
 This project incorporates and modifies work from:
 
+- https://github.com/Glat0s/gpu-unlock-windows-generic � direct upstream of this fork; generic runtime profiles, GUI, packaging and source tree.
+
 - https://github.com/luizwidmer/gpu-unlock-4090-windows ? Windows UEFI platform, ownership, recovery and firmware preparation code.
 - https://github.com/impacifist/Windows-GPU-UNLOCK ? Windows/Ampere port lineage.
 - https://github.com/JustAResearcher/gpu-unlock-ada ? Ada unlock research and payload lineage.
@@ -12,5 +14,11 @@ Source files retain SPDX identifiers and copyright notices. The unlock implement
 NVIDIA driver, boot and GSP firmware have separate NVIDIA license terms (`LICENSES/NVIDIA-Driver.txt`, `LICENSES/NVIDIA-MIT.txt`, and the generated `assets/NVIDIA-LICENSE`). Generated firmware is excluded from the source repository. Check the applicable redistribution terms before distributing a binary package. Repository-level attribution does not replace the individual files' license terms.
 
 Local modifications include runtime target discovery, a GPU PCI catalog, architecture selection, Windows Forms USB creation, benchmark reports and release validation. This project has no NVIDIA endorsement. Upstream functionality or test reports do not establish hardware validation of this derivative.
+
+This fork additionally modifies console handoff and ownership release, introduces
+native CAP01 owner/PROM gates and console graph capture, and provides optional
+local one-boot Windows diagnostic scripts. These changes preserve the original
+file licenses; hardware evidence is limited to the configuration documented in
+`docs/NATIVE-CAP01-RESULT.md`.
 
 Portable releases include the corresponding project source and individual source notices, the generated firmware license as `LICENSES/NVIDIA-Firmware.txt`, and CUDA license texts as `LICENSES/CUDA-EULA.txt` and `LICENSES/CUDA-LICENSE`. CUDA cuBLAS/cuBLASLt runtime libraries are distributed alongside the benchmark executables; they retain NVIDIA's license terms. The NVIDIA display driver is supplied by the user, not included in the release.

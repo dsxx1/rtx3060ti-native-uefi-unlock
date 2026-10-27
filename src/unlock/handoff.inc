@@ -157,10 +157,29 @@ static EFI_STATUS RestoreDisplayForWindows(const GU_RELEASE_OWNER *Owner) {
   if(!WindowsImage || !GuSafeToReturn() || !Gu.quiesced ||
      Gu.flrs!=1 || Gu.allocations || Gu.dma_count || !Gu.owned || Gu.fault)return EFI_NOT_READY;
   EFI_STATUS s=VerifySelectors("POST-FLR");if(EFI_ERROR(s))return s;
-  GuLogText("stage=before_GOP_reconnect; transaction quiesced, DMA released, PCI restored\n");
+  if(GuCfg.skip_gop_reconnect && !GuCfg.allow_headless_handoff) {
+    GuLogText("Direct handoff refused: skip_gop_reconnect requires allow_headless_handoff=1.\n");
+    return EFI_UNSUPPORTED;
+  }
+  GuLogText("stage=post-FLR-handoff; transaction quiesced, DMA released, PCI restored\n");
   if(!GuLogReady())return EFI_DEVICE_ERROR;
   s=Gu.bs->CloseProtocol(Gu.handle,&PciGuid,Gu.image,NULL);if(EFI_ERROR(s))return s;
   Gu.owned=FALSE;
+
+  /* Some firmware GOP drivers never return from ConnectController after FLR.
+   * An error fallback cannot recover from that hang. Opt in to bypassing GOP
+   * entirely; Windows must initialize the display using its own GPU driver.
+   * Keep the normal transaction, PCI and selector checks intact.
+   */
+  if(GuCfg.skip_gop_reconnect) {
+    GuScreenDetached=TRUE;ExpectDetached=TRUE;
+    GuLogText("handoff=direct-windows-v1; GOP reconnect and SetMode skipped by CONFIG.INI\n");
+    if(!GuLogReady())return EFI_DEVICE_ERROR;
+    s=RecoveryPciCheck();if(EFI_ERROR(s))return s;
+    s=VerifySelectors("PRE-WINDOWS-DIRECT");if(EFI_ERROR(s))return s;
+    GuLogText("stage=before_StartImage; direct Windows handoff, selectors and PCI verified; display may stay dark until NVIDIA driver loads\n");
+    return GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
+  }
 
   if(!Owner || !Owner->agent || !SavedDisplay.valid || SavedDisplay.remaining_bytes<4) {
     s=RecoveryPciCheck();if(EFI_ERROR(s))return s;

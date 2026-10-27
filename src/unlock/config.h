@@ -25,6 +25,8 @@ typedef struct {
   BOOLEAN strict_bar0;
   BOOLEAN strict_esp;
   BOOLEAN allow_headless_handoff;
+  BOOLEAN skip_gop_reconnect;
+  BOOLEAN detach_console_consumers;
   BOOLEAN save_prom_dump;
   BOOLEAN auto_boot;
   UINT32 countdown_seconds;

@@ -1,5 +1,14 @@
 # Review and release status
 
+## Fork follow-up � 2026-10-27
+
+The native CAP01 profile now has one successful physical Windows boot and compute
+validation on the exact MSI Z390M / RTX 3060 Ti configuration in
+[NATIVE-CAP01-RESULT.md](docs/NATIVE-CAP01-RESULT.md). This is separate from the
+historical generic release review below. Native source builds run nine host-test
+groups through `build_native_cap01.py`; generic catalog-wide physical support,
+sleep/resume, repeated boots and application-level gains are not established.
+
 Reviewed 2026-10-25 against the requested generic release requirements. The source and package have been corrected, but **production readiness and successful unlock on all RTX 3000/4000 cards cannot be certified**. No physical preboot/reset/Windows handoff test was performed in this session. Upstream projects are architecture/board-specific research; their results do not validate this derivative on every board or laptop.
 
 ## Fixed

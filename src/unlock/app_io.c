@@ -11,6 +11,7 @@ static EFI_GUID LoadedGuid=EFI_LOADED_IMAGE_PROTOCOL_GUID,PathGuid=EFI_DEVICE_PA
   FsGuid=EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,InfoGuid=EFI_FILE_INFO_ID;
 static EFI_SYSTEM_TABLE *Table;
 static EFI_HANDLE BootDeviceHandle;
+static CHAR16 HandoffTracePath[64];
 static EFI_FILE_PROTOCOL *Root,*Parent,*Run,*Report;
 static BOOLEAN LogFault;
 BOOLEAN GuScreenDetached;
@@ -113,6 +114,7 @@ static VOID TryLoadConfigIni(VOID) {
 
 EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   Table=St;Root=Parent=Run=Report=NULL;BootDeviceHandle=NULL;LogFault=FALSE;memset(GuAssets,0,sizeof(GuAssets));
+  memset(HandoffTracePath,0,sizeof(HandoffTracePath));
   EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;
   BOOLEAN is_usb=FALSE;
   EFI_STATUS status=Table->BootServices->HandleProtocol(Image,&LoadedGuid,(VOID **)&loaded);
@@ -137,6 +139,12 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
       if(!existing || EFI_ERROR(existing->Close(existing)))return EFI_DEVICE_ERROR;continue;
     }
     if(status!=EFI_NOT_FOUND)return status;
+    UINTN trace_at=0;
+    const CHAR16 *prefix=L"\\RTX4090-PREP\\",*suffix=L"\\HANDOFF.TXT";
+    for(UINTN j=0;prefix[j];j++)HandoffTracePath[trace_at++]=prefix[j];
+    for(UINTN j=0;name[j];j++)HandoffTracePath[trace_at++]=name[j];
+    for(UINTN j=0;suffix[j];j++)HandoffTracePath[trace_at++]=suffix[j];
+    HandoffTracePath[trace_at]=0;
     status=Parent->Open(Parent,&Run,name,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,EFI_FILE_DIRECTORY);
     if(EFI_ERROR(status) || !Run)return EFI_DEVICE_ERROR;
     status=Metadata(Run,TRUE,0);if(EFI_ERROR(status))return status;
@@ -152,6 +160,11 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
       GuCfg.chip_id,(unsigned)GuCfg.strict_chip,(unsigned)GuCfg.arch,
       (unsigned long long)GuCfg.bar0_base,(unsigned)GuCfg.strict_bar0,
       (unsigned)GuCfg.strict_bdf,(unsigned)GuCfg.strict_esp,(unsigned)GuCfg.allow_headless_handoff);
+#ifdef GU_NATIVE_CAP01_BUILD
+    GuLog("Handoff policy: skip_gop_reconnect=%u detach_console_consumers=%u revision=native-cap01-v4\n",(unsigned)GuCfg.skip_gop_reconnect,(unsigned)GuCfg.detach_console_consumers);
+#else
+    GuLog("Handoff policy: skip_gop_reconnect=%u detach_console_consumers=%u revision=console-chain-v3\n",(unsigned)GuCfg.skip_gop_reconnect,(unsigned)GuCfg.detach_console_consumers);
+#endif
     return GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
   }
   return EFI_VOLUME_FULL;
@@ -213,4 +226,35 @@ EFI_STATUS GuIoClose(VOID) {
     if(EFI_ERROR(status))return status;
   }
   return result;
+}
+
+/* Reopen only this run's trace after normal log handles have been closed.
+ * Flush and close it before entering Windows; record any StartImage return.
+ */
+EFI_STATUS GuTraceHandoff(const char *Phase,EFI_STATUS Status) {
+  if(!Phase || strlen(Phase)>160 || !Table || !BootDeviceHandle ||
+     !HandoffTracePath[0] || !GuSafeToReturn())return EFI_NOT_READY;
+  char text[256];UINTN used=0;
+  const char *prefix="revision=handoff-trace-v2 stage=",*middle=" status=0x";
+  for(UINTN j=0;prefix[j];j++)text[used++]=prefix[j];
+  for(UINTN j=0;Phase[j];j++)text[used++]=Phase[j];
+  for(UINTN j=0;middle[j];j++)text[used++]=middle[j];
+  for(int shift=60;shift>=0;shift-=4)text[used++]="0123456789abcdef"[((UINT64)Status>>shift)&15];
+  text[used++]='\n';
+  EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;EFI_FILE_PROTOCOL *root=NULL,*file=NULL;
+  EFI_STATUS s=Table->BootServices->HandleProtocol(BootDeviceHandle,&FsGuid,(VOID**)&fs);
+  if(EFI_ERROR(s)||!fs)return EFI_ERROR(s)?s:EFI_NOT_FOUND;
+  s=fs->OpenVolume(fs,&root);
+  if(EFI_ERROR(s)||!root)return EFI_ERROR(s)?s:EFI_DEVICE_ERROR;
+  s=root->Open(root,&file,HandoffTracePath,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
+  if(!EFI_ERROR(s) && !file)s=EFI_DEVICE_ERROR;
+  if(!EFI_ERROR(s))s=file->SetPosition(file,0xffffffffffffffffULL);
+  if(!EFI_ERROR(s)) {
+    UINTN written=used;s=file->Write(file,&written,text);
+    if(!EFI_ERROR(s) && written!=used)s=EFI_DEVICE_ERROR;
+  }
+  if(!EFI_ERROR(s))s=file->Flush(file);
+  if(file){EFI_STATUS c=file->Close(file);if(!EFI_ERROR(s))s=c;}
+  EFI_STATUS c=root->Close(root);if(!EFI_ERROR(s))s=c;
+  return s;
 }

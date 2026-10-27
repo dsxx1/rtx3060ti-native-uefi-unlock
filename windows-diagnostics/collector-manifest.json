@@ -1,0 +1,7 @@
+{
+  "collector_sha256": "7124e240553d26d63699c578e27a42e1767cc4f2ecb5b56c4c8153bbbdc92f61",
+  "revision": "native-cap01-v4-collector-1",
+  "syntax_checked": true,
+  "manual_capture_exit": 0,
+  "fault_tests_passed": true
+}

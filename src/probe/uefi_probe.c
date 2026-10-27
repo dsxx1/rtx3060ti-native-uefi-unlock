@@ -8,9 +8,17 @@
 #include <Protocol/SimpleFileSystem.h>
 #include <Protocol/DevicePath.h>
 #include <Guid/FileInfo.h>
+#ifdef GU_CONSOLE_ONLY
+#include "console_capture.h"
+/* Keep a relocated entry pointer for firmware loading this image at any base. */
+static EFI_STATUS (*volatile ConsoleCaptureEntry)(EFI_SYSTEM_TABLE *,GU_CAPTURE_SAVE,VOID *)=GuConsoleCapture;
+#endif
 
 static EFI_GUID LoadedGuid=EFI_LOADED_IMAGE_PROTOCOL_GUID,FsGuid=EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
-  PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID,PciGuid=EFI_PCI_IO_PROTOCOL_GUID,InfoGuid=EFI_FILE_INFO_ID;
+  PathGuid=EFI_DEVICE_PATH_PROTOCOL_GUID,InfoGuid=EFI_FILE_INFO_ID;
+#ifndef GU_CONSOLE_ONLY
+static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID;
+#endif
 static const char Marker[]="RTX4090-READONLY-CAPTURE-V1\n";
 static VOID Screen(EFI_SYSTEM_TABLE *St,CHAR16 *Text) {
   if(St && St->ConOut && St->ConOut->OutputString)St->ConOut->OutputString(St->ConOut,Text);
@@ -58,7 +66,10 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   EFI_BOOT_SERVICES *bs=St->BootServices;
   EFI_LOADED_IMAGE_PROTOCOL *loaded=NULL;EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs=NULL;
   EFI_FILE_PROTOCOL *root=NULL,*parent=NULL,*marker=NULL,*run=NULL;
-  EFI_HANDLE *handles=NULL;EFI_PCI_IO_PROTOCOL *target=NULL;UINTN count=0,matches=0;
+  EFI_HANDLE *handles=NULL;
+#ifndef GU_CONSOLE_ONLY
+  EFI_PCI_IO_PROTOCOL *target=NULL;UINTN count=0,matches=0;
+#endif
   Screen(St,L"RTX 3000/4000 (GA10x/AD10x) read-only diagnostic. NO UNLOCK.\r\nUSB files only; no GPU writes, DMA, reset or firmware payload.\r\n");
   EFI_STATUS status=bs->HandleProtocol(Image,&LoadedGuid,(VOID **)&loaded);
   if(EFI_ERROR(status) || !loaded || !UsbDevice(bs,loaded->DeviceHandle)){status=EFI_UNSUPPORTED;goto done;}
@@ -92,6 +103,9 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     break;
   }
   if(!run){status=EFI_VOLUME_FULL;goto done;}
+#ifdef GU_CONSOLE_ONLY
+  status=ConsoleCaptureEntry(St,NewFile,run);
+#else
   status=bs->LocateHandleBuffer(ByProtocol,&PciGuid,NULL,&count,&handles);
   if(EFI_ERROR(status) || count>512 || (count && !handles)){status=EFI_DEVICE_ERROR;goto done;}
   for(UINTN index=0;index<count;index++) {
@@ -104,6 +118,7 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   }
   if(matches!=1 || !target){status=EFI_UNSUPPORTED;goto done;}
   status=GuReadOnlyCapture(bs,target,NewFile,run);
+#endif
 done:
   if(handles)bs->FreePool(handles);
   EFI_FILE_PROTOCOL **files[]={&marker,&run,&parent,&root};

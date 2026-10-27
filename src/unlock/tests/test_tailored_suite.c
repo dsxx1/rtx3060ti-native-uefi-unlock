@@ -35,6 +35,17 @@ static void test_defaults_and_ini_parser(void) {
   assert(GuCfg.bar0_base == 0ULL);
   assert(GuCfg.bar0_bytes == 0x1000000ULL);
   assert(GuCfg.esp_guid_valid == FALSE);
+  assert(GuCfg.skip_gop_reconnect == FALSE);
+  assert(GuCfg.detach_console_consumers == FALSE);
+  const char *console_ini = "detach_console_consumers=1\n";
+  assert(GuConfigParseIni(console_ini, strlen(console_ini)) == TRUE);
+  assert(GuCfg.detach_console_consumers == TRUE);
+  const char *direct_ini = "skip_gop_reconnect=1\nallow_headless_handoff=1\n";
+  assert(GuConfigParseIni(direct_ini, strlen(direct_ini)) == TRUE);
+  assert(GuCfg.skip_gop_reconnect == TRUE);
+  const char *normal_ini = "skip_gop_reconnect=0\n";
+  assert(GuConfigParseIni(normal_ini, strlen(normal_ini)) == TRUE);
+  assert(GuCfg.skip_gop_reconnect == FALSE);
 
   /* Test tailored INI parsing */
   const char *tailored_ini =

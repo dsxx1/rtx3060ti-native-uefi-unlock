@@ -20,7 +20,7 @@ os.environ.setdefault('ZIG_LOCAL_CACHE_DIR', str(BUILD / 'zig-local-cache'))
 USB_PKG = ROOT / 'usb-package'
 
 UNLOCK_SOURCES = [
-    'app', 'app_io', 'config', 'ownership', 'format', 'runtime',
+    'app', 'app_io', 'config', 'ownership', 'console_release', 'format', 'runtime',
     'sha256', 'checks', 'port', 'compat',
     'vendor/unlock_610', 'vendor/prep_610', 'vendor/layout_610',
     'vendor/vbios_610', 'vendor/gfw_eval',

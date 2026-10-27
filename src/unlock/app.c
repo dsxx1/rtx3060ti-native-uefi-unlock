@@ -9,6 +9,7 @@
 #include "sha256.h"
 #include "prom_profile.h"
 #include "ownership.h"
+#include "console_release.h"
 #include "selector_check.h"
 #include "vendor/unlock_610.h"
 #include "vendor/vbios_610.h"
@@ -27,6 +28,7 @@ static BOOLEAN SkipToWindows;
 static const char *Stage;
 static BOOLEAN ExpectDetached;
 static GU_RELEASE_OWNER PendingOwner;
+static GU_CONSOLE_PLAN ConsolePlan;
 static struct {
   BOOLEAN valid;
   UINT32 mode;
@@ -359,6 +361,13 @@ static EFI_STATUS PromCheck(VOID) {
   GuCopyFromIo(prom,(VOID *)(UINTN)(Gu.bar_base+GU_PROM_BAR_OFFSET),GU_PROM_MAX_BYTES);
   if(Gu.fault){GuFree(prom);return EFI_DEVICE_ERROR;}
   LogHash("live PROM (1 MiB)",prom,GU_PROM_MAX_BYTES);
+#ifdef GU_NATIVE_CAP01_BUILD
+  if(!GuHashMatches(prom,GU_PROM_MAX_BYTES,"eca86bb088987d05ab08aec235803fd6f6799735b987b50229e2e25d0235081b")) {
+    GuLogText("Native CAP01 profile refused: GPU PROM SHA256 differs from saved card.\n");
+    GuFree(prom);return EFI_CRC_ERROR;
+  }
+  GuLogText("Native CAP01 profile: GPU PROM SHA256 matched.\n");
+#endif
   if(GuCfg.save_prom_dump) {
     EFI_STATUS saved=GuSavePromDump(prom,GU_PROM_MAX_BYTES);
     GuLog("PROM.BIN backup save status=%#llx\n",(unsigned long long)saved);
@@ -455,9 +464,20 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   Table=St;GuInit(St->BootServices,NULL);Gu.image=Image;Gu.display_check=DisplayCheck;
   InitialColdValid=FALSE;InitialColdSs0=InitialColdSs1=0;
   memset(&PendingOwner,0,sizeof(PendingOwner));
+  memset(&ConsolePlan,0,sizeof(ConsolePlan));
   memset(&SavedDisplay,0,sizeof(SavedDisplay));
   Stage="usb-log";EFI_STATUS status=GuIoOpen(Image,St);BOOLEAN attempted=FALSE,release_attempted=FALSE;
   if(EFI_ERROR(status))goto finish;
+#ifdef GU_NATIVE_CAP01_BUILD
+  if(!GuCfg.detach_console_consumers || !GuCfg.skip_gop_reconnect || !GuCfg.allow_headless_handoff || GuPortAutomaticBoot()) {
+    GuLogText("Native CAP01 build requires manual U, console detach, and direct Windows handoff. No GPU operation started.\n");
+    status=EFI_UNSUPPORTED;goto finish;
+  }
+#endif
+  if(GuCfg.skip_gop_reconnect && !GuCfg.allow_headless_handoff) {
+    GuLogText("Invalid handoff policy: skip_gop_reconnect requires allow_headless_handoff=1; no GPU operation started.\n");
+    status=EFI_UNSUPPORTED;goto finish;
+  }
   UINT8 secure=0xff;UINTN bytes=1;
   Stage="secure-boot";
   status=St->RuntimeServices->GetVariable(L"SecureBoot",&GlobalGuid,NULL,&bytes,&secure);
@@ -475,6 +495,12 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     status=ClearFirmwareBmeIfSet();
   }
   status=Step(status);if(EFI_ERROR(status))goto finish;
+  if(GuCfg.detach_console_consumers) {
+    Stage="console-plan";
+    if(!GuCfg.skip_gop_reconnect || !GuCfg.allow_headless_handoff)status=EFI_UNSUPPORTED;
+    else status=GuPlanConsoleRelease(St,&PendingOwner,&ConsolePlan);
+    status=Step(status);if(EFI_ERROR(status))goto finish;
+  }
   Stage="config-recheck";status=Step(ConfigCheck(FALSE));if(EFI_ERROR(status))goto finish;
   Stage="bar0";status=Step(BarCheck());if(EFI_ERROR(status))goto finish;
   Stage="cold-state";status=Step(ColdCheck());if(EFI_ERROR(status))goto finish;
@@ -494,6 +520,15 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     status=GuFindReleaseOwner(St,&current,FALSE);
     if(!EFI_ERROR(status) && !GuSameReleaseOwner(&PendingOwner,&current))status=EFI_ABORTED;
     if(EFI_ERROR(status)){status=Step(status);goto finish;}
+    if(GuCfg.detach_console_consumers) {
+      Stage="console-release";release_attempted=TRUE;Gu.armed=TRUE;
+      status=Step(GuReleaseConsoleConsumers(St,&current,&ConsolePlan));
+      if(EFI_ERROR(status))goto finish;
+      GU_RELEASE_OWNER after_console;
+      status=GuFindReleaseOwner(St,&after_console,FALSE);
+      if(!EFI_ERROR(status) && !GuSameReleaseOwner(&current,&after_console))status=EFI_ABORTED;
+      status=Step(status);if(EFI_ERROR(status))goto finish;
+    }
     EFI_PCI_IO_PROTOCOL *prior=Gu.pci;
     Stage="driver-release";release_attempted=TRUE;Gu.armed=TRUE;Gu.pci=NULL;
     GuScreenDetached=TRUE;ExpectDetached=TRUE;
@@ -538,6 +573,13 @@ finish:
   else GuConsole("Preflight or logging failed; no new attempt will start.\n");
   if(!GuLogReady()){status=EFI_DEVICE_ERROR;if(release_attempted)ReleaseHalt(status,attempted);if(Gu.started)Halt();}
   if(attempted && !GuSafeToReturn())Halt();
+  if(!EFI_ERROR(status) && attempted) {
+    GuLogText("stage=before_asset_release\n");
+    if(!GuLogReady())Halt();
+    GuReleaseAssets();
+    GuLogText("stage=asset_release_complete; next=close_usb_log\n");
+    if(!GuLogReady())Halt();
+  }
   EFI_STATUS closed=GuIoClose();
   if(EFI_ERROR(closed)){if(release_attempted)ReleaseHalt(closed,attempted);if(Gu.started)Halt();status=closed;}
   if(Gu.owned) {
@@ -546,10 +588,10 @@ finish:
   }
   GuReleaseAssets();
   if(!EFI_ERROR(status) && attempted) {
-    GuLog("%s (%s) unlocked & verified after FLR. Starting Windows 11...\n",
-      Gu.target_model_name, Gu.target_chip_family);
+    if(EFI_ERROR(GuTraceHandoff("usb_log_closed_before_StartImage",EFI_SUCCESS)))Halt();
     UINTN exit_bytes=0;CHAR16 *data=NULL;
     status=Gu.bs->StartImage(WindowsImage,&exit_bytes,&data);
+    (void)GuTraceHandoff("StartImage_RETURNED",status);
     if(data)GuFree(data);
     GuScreenDetached=TRUE;Halt();
   }

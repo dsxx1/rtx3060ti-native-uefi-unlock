@@ -15,8 +15,9 @@ static EFI_STATUS EFIAPI Alloc(EFI_MEMORY_TYPE Type,UINTN Size,VOID **Out) {
 static EFI_STATUS EFIAPI Free(VOID *Value) {assert(Value);free(Value);Allocations--;return EFI_SUCCESS;}
 static EFI_STATUS EFIAPI Config(EFI_PCI_IO_PROTOCOL *Self,EFI_PCI_IO_PROTOCOL_WIDTH Width,UINT32 Offset,UINTN Count,VOID *Buffer) {
   assert(Self==&Pci && Width==EfiPciIoWidthUint32 && Offset==0 && Count==64);
-  UINT32 *p=Buffer;memset(p,0,256);p[0]=Mode==1?0x268510deU:0x268410deU;
+  UINT32 *p=Buffer;memset(p,0,256);p[0]=Mode==1?0xffff10deU:Mode==3?0x26841234U:0x268410deU;
   p[1]=Mode==4?0:3;p[2]=0x030000a1U;p[11]=Mode==2?0x13bb196eU:0x13ba196eU;
+  if(Mode==2)p[2]=0x020000a1U; /* Non-display class: generic capture must refuse. */
   if(Mode==10 && MemReads)p[1]^=1;
   return Mode==12?EFI_DEVICE_ERROR:EFI_SUCCESS;
 }
@@ -35,7 +36,7 @@ static EFI_STATUS EFIAPI Bar(EFI_PCI_IO_PROTOCOL *Self,UINT8 Index,UINT64 *Suppo
 }
 static EFI_STATUS EFIAPI Memory(EFI_PCI_IO_PROTOCOL *Self,EFI_PCI_IO_PROTOCOL_WIDTH Width,UINT8 Index,UINT64 Offset,UINTN Count,VOID *Buffer) {
   assert(Self==&Pci && Width==EfiPciIoWidthUint32 && Index==0);MemReads++;
-  if(Count==1){*(UINT32 *)Buffer=Offset==0?(Mode==6?0x193000a1U:0x192000a1U):0x1234;return EFI_SUCCESS;}
+  if(Count==1){*(UINT32 *)Buffer=Offset==0?(Mode==6?0xdeadbeefU:0x192000a1U):0x1234;return EFI_SUCCESS;}
   assert(Count==1024 && Offset>=0x300000 && Offset+Count*4<=0x400000);PromReads++;
   if(Mode==9)return EFI_DEVICE_ERROR;
   memset(Buffer,0x5a,Count*4);return EFI_SUCCESS;
@@ -54,11 +55,12 @@ int main(void) {
        Any accidental use crashes the native test rather than touching hardware. */
     Pci.RomImage=Mode==7?NULL:Rom;Pci.RomSize=Mode==8?17U*1024U*1024U:sizeof(Rom);
     EFI_STATUS status=GuReadOnlyCapture(&bs,&Pci,Save,NULL);
-    if(Mode==0 || Mode==10)assert(status==EFI_SUCCESS);
+    if(Mode==0 || Mode==7 || Mode==8 || Mode==10)assert(status==EFI_SUCCESS);
     else assert(EFI_ERROR(status));
     assert(Allocations==0);
     if(Mode>=1 && Mode<=5)assert(MemReads==0);
     if(Mode==0 || Mode==10)assert(PromReads==256 && Saves==5);
+    if(Mode==7 || Mode==8)assert(PromReads==256 && Saves==4); /* Optional ROM absent/too large. */
     printf("read-only capture synthetic mode=%d result=%llx PASS\n",Mode,(unsigned long long)status);
   }
   assert(GuReadOnlyCapture(NULL,&Pci,Save,NULL)==EFI_INVALID_PARAMETER);

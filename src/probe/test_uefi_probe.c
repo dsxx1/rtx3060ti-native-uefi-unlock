@@ -5,6 +5,14 @@
 #include "uefi_probe.c"
 
 static int Fault,Writes,Closes,Waits;
+#ifdef GU_CONSOLE_ONLY
+static EFI_GUID PciGuid=EFI_PCI_IO_PROTOCOL_GUID;
+EFI_STATUS GuConsoleCapture(EFI_SYSTEM_TABLE *table,GU_CAPTURE_SAVE save,VOID *context) {
+  if(Fault==6 || Fault==7)return EFI_DEVICE_ERROR;
+  const char content[]="format=UEFI-CONSOLE-OBSERVE-V1\ncomplete=1\n";
+  return save(L"CONSOLE.TXT",content,sizeof(content)-1,context);
+}
+#endif
 static EFI_FILE_PROTOCOL RootFile,ParentFile,MarkerFile,RunFile,DataFile;
 static EFI_LOADED_IMAGE_PROTOCOL Loaded;
 static EFI_SIMPLE_FILE_SYSTEM_PROTOCOL Fs;
@@ -80,7 +88,11 @@ int main(void) {
     EFI_BOOT_SERVICES bs={.HandleProtocol=Handle,.LocateHandleBuffer=Handles,.AllocatePool=Alloc,.FreePool=Free,.Stall=Wait};
     EFI_SYSTEM_TABLE st={.BootServices=&bs};
     EFI_STATUS status=EfiMain((EFI_HANDLE)(UINTN)0x10,&st);
+#ifdef GU_CONSOLE_ONLY
+    if(!Fault)assert(status==EFI_SUCCESS && Writes==1 && !PromReads && !MemReads);
+#else
     if(!Fault)assert(status==EFI_SUCCESS && Writes==5 && PromReads==256);
+#endif
     else assert(EFI_ERROR(status));
     if(Fault==1 || Fault==2 || Fault==3 || Fault==5 || Fault==6 || Fault==7 || Fault==8 || Fault==9 || Fault==11)
       assert(!Writes && !MemReads);

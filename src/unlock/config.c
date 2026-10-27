@@ -216,6 +216,10 @@ static VOID ApplyKeyValue(const char *k, UINTN k_len, const char *v, UINTN v_len
     if (ParseU64(v, v_len, &num)) GuCfg.strict_esp = num != 0;
   } else if (StrEqIgnoreCase(k, k_len, "allow_headless_handoff")) {
     if (ParseU64(v, v_len, &num)) GuCfg.allow_headless_handoff = num != 0;
+  } else if (StrEqIgnoreCase(k, k_len, "skip_gop_reconnect")) {
+    if (ParseU64(v, v_len, &num)) GuCfg.skip_gop_reconnect = num != 0;
+  } else if (StrEqIgnoreCase(k, k_len, "detach_console_consumers")) {
+    if (ParseU64(v, v_len, &num)) GuCfg.detach_console_consumers = num != 0;
   } else if (StrEqIgnoreCase(k, k_len, "save_prom_dump")) {
     if (ParseU64(v, v_len, &num)) GuCfg.save_prom_dump = num != 0;
   } else if (StrEqIgnoreCase(k, k_len, "windows_esp_guid") || StrEqIgnoreCase(k, k_len, "esp_guid")) {

@@ -1,8 +1,24 @@
 # RTX 3000 / 4000 Windows UEFI Tensor Core unlock experiment
 
+## This fork: native CAP01 RTX 3060 Ti experiment
+
+Fork of [Glat0s/gpu-unlock-windows-generic](https://github.com/Glat0s/gpu-unlock-windows-generic),
+preserving its upstream history and license notices. This fork adds a manual-only
+native-UEFI profile, a standalone read-only console graph probe, and optional
+one-boot Windows NVIDIA telemetry. **One successful physical boot** was recorded
+on MSI MAG Z390M MORTAR BIOS 1.B1 / MSI RTX 3060 Ti LHR `2489:3903`, with correct
+GEMM results and approximately 72.5/72.6 TFLOPS FP16/BF16 FP32-accumulate medians.
+This does not establish universal card support, a 2x token-generation gain, or
+long-term stability. See the [exact result](docs/NATIVE-CAP01-RESULT.md).
+
+Use [the native-profile guide](docs/NATIVE-CAP01.md),
+`python build_native_cap01.py`, and `Stage-NativeCap01.ps1` for this route.
+The inherited generic GUI/build instructions below do not select the tested
+native profile. No binary, firmware or private machine capture is included.
+
 Windows tools for discovering hardware, generating a runtime profile, staging a FAT32 UEFI USB drive, and measuring FP16/BF16 Tensor Core throughput with FP32 accumulation. This changes Tensor Core instruction issue rates; it does not raise the GPU power limit or guarantee gaming performance gains.
 
-**Status: experimental. This project is not validated for production or for every RTX 3000/4000 card.** The PCI catalog recognizes Ampere GA10x and Ada AD10x devices, including mobile IDs. Recognition, shared architecture signatures and successful compilation do not prove that firmware execution, reset, display recovery or Windows handoff works on a particular board. No physical preboot compatibility matrix has been established for this port. See [REVIEW.md](REVIEW.md).
+**Status: experimental. This project is not validated for production or for every RTX 3000/4000 card.** The PCI catalog recognizes Ampere GA10x and Ada AD10x devices, including mobile IDs. Recognition, shared architecture signatures and successful compilation do not prove that firmware execution, reset, display recovery or Windows handoff works on a particular board. The single native-profile result above is not a general compatibility matrix. See [REVIEW.md](REVIEW.md).
 
 ## GUI preview
 

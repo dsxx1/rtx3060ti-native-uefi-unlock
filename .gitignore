@@ -15,3 +15,10 @@
 !/benchmark-reports/.gitkeep
 __pycache__/
 *.pyc
+/windows-diagnostics/installer-status.json
+/windows-diagnostics/*baseline/
+/windows-diagnostics/*health*/
+/windows-diagnostics/tests/
+/windows-diagnostics/armed.json
+/windows-diagnostics/logs/
+/NATIVE-CAP01-BACKUP/
